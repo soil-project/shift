@@ -64,7 +64,7 @@ var (
 			"seedHash",
 			"setHead",
 		},
-		"eth": []string{
+		"shf": []string{
 			"accounts",
 			"blockNumber",
 			"call",
