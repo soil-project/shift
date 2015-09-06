@@ -44,8 +44,8 @@ import (
 
 var (
 	filterTickerTime = 5 * time.Minute
-	defaultGasPrice  = big.NewInt(10000000000000) //150000000000
-	defaultGas       = big.NewInt(90000)          //500000
+	defaultGasPrice  = big.NewInt(10000000000000)
+	defaultGas       = big.NewInt(330000)
 	dappStorePre     = []byte("dapp-")
 	addrReg          = regexp.MustCompile(`^(0x)?[a-fA-F0-9]{40}$`)
 )
