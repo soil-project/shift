@@ -101,29 +101,26 @@ func checkVersion(db *sql.DB) (bool, error) {
   return false, nil
 }
 
-// NewSQLiteDatabase returns a sqlite3 wrapped object. sqlite3 does not persist data by
-// it self but requires a background poller which syncs every X. `Flush` should be called
-// when data needs to be stored and written to disk.
-func NewSQLiteDatabase(file string) (*SQLDB, error) {
-	// Open the db
-	db, err := sql.Open("sqlite3", file)
-	// (Re)check for errors and abort if opening of the db failed
-	if err != nil {
-		return nil, err
-	}
+func Init(file string) (*sql.DB, error) {
+  // Open the db
+  db, err := sql.Open("sqlite3", file)
+  // (Re)check for errors and abort if opening of the db failed
+  if err != nil {
+    return nil, err
+  }
 
   var cv bool = false
   var ct bool = false
   ct, err = checkTables(db)
   if err != nil {
-		return nil, err
-	}
+    return nil, err
+  }
 
   if ct {
     cv, err = checkVersion(db)
     if err != nil {
-		  return nil, err
-	  }
+      return nil, err
+    }
   }
 
   // tables exist with version mismatch, drop and recreate
@@ -133,11 +130,11 @@ func NewSQLiteDatabase(file string) (*SQLDB, error) {
     os.Remove(file)
 
     // Open the db
-  	db, err = sql.Open("sqlite3", file)
-  	// (Re)check for errors and abort if opening of the db failed
-  	if err != nil {
-  		return nil, err
-  	}
+    db, err = sql.Open("sqlite3", file)
+    // (Re)check for errors and abort if opening of the db failed
+    if err != nil {
+      return nil, err
+    }
     ct = false
   }
 
@@ -174,6 +171,19 @@ func NewSQLiteDatabase(file string) (*SQLDB, error) {
     glog.V(logger.Info).Infoln("Loading existing SQL DB", file)
   }
 
+  return db, nil;
+}
+
+// NewSQLiteDatabase returns a sqlite3 wrapped object. sqlite3 does not persist data by
+// it self but requires a background poller which syncs every X. `Flush` should be called
+// when data needs to be stored and written to disk.
+func NewSQLiteDatabase(file string) (*SQLDB, error) {
+  db, err :=  Init(file)
+
+  if err != nil {
+    return nil, err
+  }
+
 	return &SQLDB{
 		fn: file,
 		db: db,
@@ -192,10 +202,17 @@ func (self *SQLDB) Refresh(chainManager *core.ChainManager) {
   if fromBlock >= toBlock {
     // sanity check TODO: redo the whole SQL DB in this case!
     if fromBlock > toBlock {
-      glog.V(logger.Error).Infoln("SQL DB ahead of chain")
+      glog.V(logger.Error).Infoln("SQL DB ahead of chain, recreating")
+      self.Close()
+      os.Remove(self.fn)
+      self.db, err = Init(self.fn)
+      if err != nil {
+        glog.V(logger.Error).Infoln("SQL DB Reinit:", err)
+        return
+      }
+    } else {
+      return
     }
-
-    return
   }
 
   tx, err := self.db.Begin()
@@ -274,8 +291,19 @@ func (self *SQLDB) InsertBlock(block *types.Block) {
   // transactions
 
   for _, trans := range block.Transactions() {
-    transFrom, err := trans.From()
-    _, err = stmtTrans.Exec(trans.Hash().Hex(), block.Number().Uint64(), transFrom.Hex(), trans.To().Hex())
+    sender, err := trans.From()
+    if err != nil {
+      glog.V(logger.Error).Infoln("SQL DB:", err)
+      continue
+    }
+    senderHex := sender.Hex()
+    receiver := trans.To()
+    receiverHex := ""
+    if ( receiver != nil ) {
+      receiverHex = receiver.Hex()
+    }
+
+    _, err = stmtTrans.Exec(trans.Hash().Hex(), block.Number().Uint64(), senderHex, receiverHex)
     if err != nil {
       glog.V(logger.Error).Infoln("SQL DB:", err)
       tx.Rollback()
