@@ -103,7 +103,7 @@ func NewChainManager(chainDb common.Database, pow pow.PoW, mux *event.TypeMux) (
 		if err != nil {
 			return nil, err
 		}
-		glog.V(logger.Info).Infoln("WARNING: Wrote default shift genesis block")
+		glog.V(logger.Info).Infoln("WARNING: Wrote default ethereum genesis block")
 	}
 
 	if err := bc.setLastState(); err != nil {
@@ -596,8 +596,7 @@ func (self *ChainManager) InsertChain(chain types.Blocks) (int, error) {
 				// Allow up to MaxFuture second in the future blocks. If this limit
 				// is exceeded the chain is discarded and processed at a later time
 				// if given.
-				max := big.NewInt(time.Now().Unix() + maxTimeFutureBlocks)
-				if block.Time().Cmp(max) == 1 {
+				if max := uint64(time.Now().Unix()) + maxTimeFutureBlocks; block.Time() > max {
 					return i, fmt.Errorf("%v: BlockFutureErr, %v > %v", BlockFutureErr, block.Time(), max)
 				}
 
@@ -648,9 +647,7 @@ func (self *ChainManager) InsertChain(chain types.Blocks) (int, error) {
 			queue[i] = ChainSplitEvent{block, logs}
 			queueEvent.splitCount++
 		}
-		if err := PutBlockReceipts(self.chainDb, block, receipts); err != nil {
-			glog.V(logger.Warn).Infoln("error writing block receipts:", err)
-		}
+		PutBlockReceipts(self.chainDb, block, receipts)
 
 		stats.processed++
 	}
@@ -664,6 +661,82 @@ func (self *ChainManager) InsertChain(chain types.Blocks) (int, error) {
 	go self.eventMux.Post(queueEvent)
 
 	return 0, nil
+}
+
+// reorgs takes two blocks, an old chain and a new chain and will reconstruct the blocks and inserts them
+// to be part of the new canonical chain and accumulates potential missing transactions and post an
+// event about them
+func (self *ChainManager) reorg(oldBlock, newBlock *types.Block) error {
+	self.mu.Lock()
+	defer self.mu.Unlock()
+
+	var (
+		newChain    types.Blocks
+		commonBlock *types.Block
+		oldStart    = oldBlock
+		newStart    = newBlock
+		deletedTxs  types.Transactions
+		addedTxs    types.Transactions
+	)
+
+	// first reduce whoever is higher bound
+	if oldBlock.NumberU64() > newBlock.NumberU64() {
+		// reduce old chain
+		for oldBlock = oldBlock; oldBlock != nil && oldBlock.NumberU64() != newBlock.NumberU64(); oldBlock = self.GetBlock(oldBlock.ParentHash()) {
+			deletedTxs = append(deletedTxs, oldBlock.Transactions()...)
+		}
+	} else {
+		// reduce new chain and append new chain blocks for inserting later on
+		for newBlock = newBlock; newBlock != nil && newBlock.NumberU64() != oldBlock.NumberU64(); newBlock = self.GetBlock(newBlock.ParentHash()) {
+			newChain = append(newChain, newBlock)
+		}
+	}
+	if oldBlock == nil {
+		return fmt.Errorf("Invalid old chain")
+	}
+	if newBlock == nil {
+		return fmt.Errorf("Invalid new chain")
+	}
+
+	numSplit := newBlock.Number()
+	for {
+		if oldBlock.Hash() == newBlock.Hash() {
+			commonBlock = oldBlock
+			break
+		}
+		newChain = append(newChain, newBlock)
+
+		oldBlock, newBlock = self.GetBlock(oldBlock.ParentHash()), self.GetBlock(newBlock.ParentHash())
+		if oldBlock == nil {
+			return fmt.Errorf("Invalid old chain")
+		}
+		if newBlock == nil {
+			return fmt.Errorf("Invalid new chain")
+		}
+		deletedTxs = append(deletedTxs, oldBlock.Transactions()...)
+	}
+
+	if glog.V(logger.Debug) {
+		commonHash := commonBlock.Hash()
+		glog.Infof("Chain split detected @ %x. Reorganising chain from #%v %x to %x", commonHash[:4], numSplit, oldStart.Hash().Bytes()[:4], newStart.Hash().Bytes()[:4])
+	}
+
+	// insert blocks. Order does not matter. Last block will be written in ImportChain itself which creates the new head properly
+	for _, block := range newChain {
+		// insert the block in the canonical way, re-writing history
+		self.insert(block)
+		// write canonical receipts and transactions
+		PutTransactions(self.chainDb, block, block.Transactions())
+		PutReceipts(self.chainDb, GetBlockReceipts(self.chainDb, block.Hash()))
+
+		addedTxs = append(addedTxs, block.Transactions()...)
+	}
+
+	var diff types.Transactions
+	diff.Difference(deletedTxs, addedTxs)
+	self.eventMux.Post(RemovedTransactionEvent{diff})
+
+	return nil
 }
 
 // diff takes two blocks, an old chain and a new chain and will reconstruct the blocks and inserts them
