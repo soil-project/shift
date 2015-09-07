@@ -103,7 +103,7 @@ func NewChainManager(chainDb common.Database, pow pow.PoW, mux *event.TypeMux) (
 		if err != nil {
 			return nil, err
 		}
-		glog.V(logger.Info).Infoln("WARNING: Wrote default ethereum genesis block")
+		glog.V(logger.Info).Infoln("WARNING: Wrote default Shift genesis block")
 	}
 
 	if err := bc.setLastState(); err != nil {
