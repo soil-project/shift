@@ -18,6 +18,9 @@ package sqldb
 
 import (
   "os"
+  "errors"
+  "strings"
+  "regexp"
   "database/sql"
 	"sync"
 
@@ -248,8 +251,18 @@ func (self *SQLDB) Refresh(chainManager *core.ChainManager) {
     // transactions
 
     for _, trans := range block.Transactions() {
-      transFrom, err := trans.From()
-      _, err = stmtTrans.Exec(trans.Hash().Hex(), i, transFrom.Hex(), trans.To().Hex())
+      sender, err := trans.From()
+      if err != nil {
+        glog.V(logger.Error).Infoln("SQL DB:", err)
+        continue
+      }
+      senderHex := sender.Hex()
+      receiver := trans.To()
+      receiverHex := ""
+      if ( receiver != nil ) {
+        receiverHex = receiver.Hex()
+      }
+      _, err = stmtTrans.Exec(trans.Hash().Hex(), i, senderHex, receiverHex)
   		if err != nil {
         glog.V(logger.Error).Infoln("SQL DB:", err)
         tx.Rollback()
@@ -341,6 +354,48 @@ func (self *SQLDB) Close() {
 
 	self.db.Close()
 	glog.V(logger.Error).Infoln("Closed SQL DB:", self.fn)
+}
+
+func (self *SQLDB) SelectTransactionsForAccounts(accounts []string) (trans []string, err error) {
+  if len(accounts) <= 0 {
+    return nil, errors.New("Accounts required")
+  }
+
+  // regexp check for SQL safety
+  for _, acct := range accounts {
+  	matched, err := regexp.MatchString("^0x[0-9,a-f]{40}$", acct)
+    if err != nil {
+      return nil, err
+    }
+    if !matched {
+      return nil, errors.New("Input account error")
+    }
+  }
+
+  acctSQL := strings.Join(accounts, "','")
+  query := `
+    SELECT hash
+    FROM shift_transactions
+    WHERE sender IN ('`
+  query += acctSQL
+  query += `')
+    OR receiver IN ('`
+  query += acctSQL
+  query += `')`
+
+  rows, err := self.db.Query(query)
+  if err != nil {
+    return nil, err
+  }
+
+  for rows.Next() {
+    var hash string
+    rows.Scan(&hash)
+    trans = append(trans, hash)
+  }
+  rows.Close()
+
+  return trans, nil
 }
 
 func (self *SQLDB) DB() *sql.DB {
