@@ -36,9 +36,6 @@ type NewBlockEvent struct{ Block *types.Block }
 // NewMinedBlockEvent is posted when a block has been imported.
 type NewMinedBlockEvent struct{ Block *types.Block }
 
-// RemovedTransactionEvent is posted when a reord happens
-type RemovedTransactionEvent struct{ Txs types.Transactions }
-
 // ChainSplit is posted when a new head is detected
 type ChainSplitEvent struct {
 	Block *types.Block
