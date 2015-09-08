@@ -35,6 +35,7 @@ var (
 	// mapping between methods and handlers
 	personalMapping = map[string]personalhandler{
 		"personal_listAccounts":  (*personalApi).ListAccounts,
+		"personal_listAccountTransactions":  (*personalApi).ListAccountTransactions,
 		"personal_newAccount":    (*personalApi).NewAccount,
 		"personal_deleteAccount": (*personalApi).DeleteAccount,
 		"personal_unlockAccount": (*personalApi).UnlockAccount,
@@ -80,6 +81,7 @@ func (self *personalApi) Execute(req *shared.Request) (interface{}, error) {
 		return callback(self, req)
 	}
 
+  fmt.Println("DUNNO")
 	return nil, shared.NewNotImplementedError(req.Method)
 }
 
@@ -93,6 +95,11 @@ func (self *personalApi) ApiVersion() string {
 
 func (self *personalApi) ListAccounts(req *shared.Request) (interface{}, error) {
 	return self.xeth.Accounts(), nil
+}
+
+func (self *personalApi) ListAccountTransactions(req *shared.Request) (interface{}, error) {
+	args := new(ListTransactionsArgs)
+	return self.xeth.AccountTransactions(args.Accounts), nil
 }
 
 func (self *personalApi) NewAccount(req *shared.Request) (interface{}, error) {

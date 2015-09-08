@@ -393,6 +393,17 @@ func (self *XEth) Accounts() []string {
 	return accountAddresses
 }
 
+func (self *XEth) AccountTransactions(accts []string) []string {
+	transactions, err := self.backend.SQLDB().SelectTransactionsForAccounts(accts)
+
+  // TODO: refactor xeth for proper error handling
+	if err != nil {
+		fmt.Println("Error reading transactions from SQL", err)
+	}
+
+	return transactions
+}
+
 // accessor for solidity compiler.
 // memoized if available, retried on-demand if not
 func (self *XEth) Solc() (*compiler.Solidity, error) {
