@@ -58,12 +58,23 @@ func (args *ListTransactionsArgs) UnmarshalJSON(b []byte) (err error) {
 		return shared.NewInsufficientParamsError(len(obj), 1)
 	}
 
-	if accounts, ok := obj[0].([]string); ok {
-		args.Accounts = accounts
+	other, ok := obj[0].([]interface{})
+	if !ok {
+		other = obj
+		ok = true
+	}
+
+	if ok {
+		args.Accounts = make([]string, len(other))
+		for i, acct := range other {
+			if args.Accounts[i], ok = acct.(string); !ok {
+				return shared.NewInvalidTypeError("accounts", "not a string array2")
+			}
+		}
 		return nil
 	}
 
-	return shared.NewInvalidTypeError("accounts", "not a string array")
+	return shared.NewInvalidTypeError("accounts", "not a string array1")
 }
 
 

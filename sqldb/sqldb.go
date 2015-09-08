@@ -358,7 +358,7 @@ func (self *SQLDB) Close() {
 
 func (self *SQLDB) SelectTransactionsForAccounts(accounts []string) (trans []string, err error) {
   if len(accounts) <= 0 {
-    return nil, errors.New("Accounts required")
+    return nil, errors.New("Input accounts required")
   }
 
   // regexp check for SQL safety

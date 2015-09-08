@@ -98,6 +98,10 @@ func (self *personalApi) ListAccounts(req *shared.Request) (interface{}, error) 
 
 func (self *personalApi) ListAccountTransactions(req *shared.Request) (interface{}, error) {
 	args := new(ListTransactionsArgs)
+	if err := self.codec.Decode(req.Params, &args); err != nil {
+		return nil, shared.NewDecodeParamError(err.Error())
+	}
+	
 	return self.xeth.AccountTransactions(args.Accounts), nil
 }
 
