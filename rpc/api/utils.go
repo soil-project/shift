@@ -117,6 +117,7 @@ var (
 		},
 		"personal": []string{
 			"listAccounts",
+			"listAccountTransactions",
 			"newAccount",
 			"deleteAccount",
 			"unlockAccount",

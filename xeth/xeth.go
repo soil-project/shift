@@ -40,6 +40,7 @@ import (
 	"github.com/shiftcurrency/shift/logger/glog"
 	"github.com/shiftcurrency/shift/miner"
 	"github.com/shiftcurrency/shift/rlp"
+	"github.com/shiftcurrency/shift/sqldb"
 )
 
 var (
@@ -391,6 +392,17 @@ func (self *XEth) Accounts() []string {
 		accountAddresses[i] = ac.Address.Hex()
 	}
 	return accountAddresses
+}
+
+func (self *XEth) AccountTransactions(accts []string) sqldb.SQL_Transactions {
+	transactions, err := self.backend.SQLDB().SelectTransactionsForAccounts(accts)
+
+  // TODO: refactor xeth for proper error handling
+	if err != nil {
+		fmt.Println("Error reading transactions from SQL", err)
+	}
+
+	return transactions
 }
 
 // accessor for solidity compiler.

@@ -46,6 +46,7 @@ import (
 	"github.com/shiftcurrency/shift/p2p/discover"
 	"github.com/shiftcurrency/shift/p2p/nat"
 	"github.com/shiftcurrency/shift/whisper"
+	"github.com/shiftcurrency/shift/sqldb"
 )
 
 const (
@@ -219,6 +220,7 @@ type Ethereum struct {
 	// DB interfaces
 	chainDb common.Database // Block chain databe
 	dappDb  common.Database // Dapp database
+	sqlDB   *sqldb.SQLDB
 
 	// Closed when databases are flushed and closed
 	databasesClosed chan bool
@@ -361,6 +363,11 @@ func New(config *Config) (*Ethereum, error) {
 		GpobaseCorrectionFactor: config.GpobaseCorrectionFactor,
 	}
 
+	eth.sqlDB, err = sqldb.NewSQLiteDatabase(filepath.Join(config.DataDir, "sql.db"))
+	if err != nil {
+		return nil, err
+	}
+
 	if config.PowTest {
 		glog.V(logger.Info).Infof("ethash used in test mode")
 		eth.pow, err = ethash.NewForTesting()
@@ -371,7 +378,7 @@ func New(config *Config) (*Ethereum, error) {
 		eth.pow = ethash.New()
 	}
 	//genesis := core.GenesisBlock(uint64(config.GenesisNonce), stateDb)
-	eth.chainManager, err = core.NewChainManager(chainDb, eth.pow, eth.EventMux())
+	eth.chainManager, err = core.NewChainManager(chainDb, eth.sqlDB, eth.pow, eth.EventMux())
 	if err != nil {
 		if err == core.ErrNoGenesis {
 			return nil, fmt.Errorf(`Genesis block not found. Please supply a genesis block with the "--genesis /path/to/file" argument`)
@@ -421,6 +428,8 @@ func New(config *Config) (*Ethereum, error) {
 	}
 
 	vm.Debug = config.VmDebug
+
+	eth.sqlDB.Refresh(eth.chainManager)
 
 	return eth, nil
 }
@@ -525,6 +534,7 @@ func (s *Ethereum) Miner() *miner.Miner { return s.miner }
 func (s *Ethereum) Name() string                         { return s.net.Name }
 func (s *Ethereum) AccountManager() *accounts.Manager    { return s.accountManager }
 func (s *Ethereum) ChainManager() *core.ChainManager     { return s.chainManager }
+func (s *Ethereum) SQLDB() *sqldb.SQLDB     						 { return s.sqlDB }
 func (s *Ethereum) BlockProcessor() *core.BlockProcessor { return s.blockProcessor }
 func (s *Ethereum) TxPool() *core.TxPool                 { return s.txPool }
 func (s *Ethereum) Whisper() *whisper.Whisper            { return s.whisper }
@@ -623,6 +633,7 @@ func (s *Ethereum) Stop() {
 		s.whisper.Stop()
 	}
 	s.StopAutoDAG()
+	s.sqlDB.Close() // close here since we want to keep it open for the lifetime, not "cache" like the levelDB
 
 	close(s.shutdownChan)
 }

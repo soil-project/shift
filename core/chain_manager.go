@@ -57,6 +57,7 @@ const (
 type ChainManager struct {
 	//eth          EthManager
 	chainDb      common.Database
+	sqlDB        types.SQLDatabase
 	processor    types.BlockProcessor
 	eventMux     *event.TypeMux
 	genesisBlock *types.Block
@@ -83,10 +84,11 @@ type ChainManager struct {
 	pow pow.PoW
 }
 
-func NewChainManager(chainDb common.Database, pow pow.PoW, mux *event.TypeMux) (*ChainManager, error) {
+func NewChainManager(chainDb common.Database, sqlDB types.SQLDatabase, pow pow.PoW, mux *event.TypeMux) (*ChainManager, error) {
 	cache, _ := lru.New(blockCacheLimit)
 	bc := &ChainManager{
 		chainDb:  chainDb,
+		sqlDB:    sqlDB,
 		eventMux: mux,
 		quit:     make(chan struct{}),
 		cache:    cache,
@@ -273,6 +275,10 @@ func (bc *ChainManager) Reset() {
 }
 
 func (bc *ChainManager) removeBlock(block *types.Block) {
+	if bc.sqlDB != nil {
+		bc.sqlDB.DeleteBlock(block)
+	}
+
 	bc.chainDb.Delete(append(blockHashPre, block.Hash().Bytes()...))
 }
 
@@ -352,6 +358,10 @@ func (bc *ChainManager) insert(block *types.Block) {
 
 	bc.currentBlock = block
 	bc.lastBlockHash = block.Hash()
+
+  if bc.sqlDB != nil {
+  	bc.sqlDB.InsertBlock(block)
+	}
 }
 
 // Accessors
