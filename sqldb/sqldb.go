@@ -54,7 +54,7 @@ func NewTransaction(hash string, blocknumber uint64) *SQL_Transaction {
 }
 
 func (self *SQL_Transaction) MarshalJSON() ([]byte, error) {
-  result := fmt.Sprintf(`{ "hash": "%s", "blockNumber": %d }`, self.Hash, self.BlockNumber)
+  result := fmt.Sprintf(`{ "hash": "%s", "blockNumber": "0x%x" }`, self.Hash, self.BlockNumber);
   return []byte(result), nil
 }
 
