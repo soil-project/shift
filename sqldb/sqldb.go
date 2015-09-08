@@ -18,6 +18,8 @@ package sqldb
 
 import (
   "os"
+  "io"
+  "fmt"
   "errors"
   "strings"
   "regexp"
@@ -26,6 +28,7 @@ import (
 
 	"github.com/shiftcurrency/shift/logger"
 	"github.com/shiftcurrency/shift/logger/glog"
+  "github.com/shiftcurrency/shift/rlp"
   "github.com/shiftcurrency/shift/core"
   "github.com/shiftcurrency/shift/core/types"
   _ "github.com/mattn/go-sqlite3"
@@ -52,6 +55,25 @@ type SQLDB struct {
 	quitLock sync.Mutex      // Mutex protecting the quit channel access
 	quitChan chan chan error // Quit channel to stop the metrics collection before closing the database
 }
+
+type SQL_Transaction struct {
+  Hash          string
+  BlockNumber   uint64
+}
+
+func NewTransaction(hash string, blocknumber uint64) *SQL_Transaction {
+	return &SQL_Transaction{Hash: hash, BlockNumber: blocknumber}
+}
+
+func (self *SQL_Transaction) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, []interface{}{self.Hash, self.BlockNumber})
+}
+
+func (self *SQL_Transaction) String() string {
+	return fmt.Sprintf(`sql transaction: %x %d`, self.Hash, self.BlockNumber)
+}
+
+type SQL_Transactions []*SQL_Transaction
 
 func checkExists(db *sql.DB, query string) (bool, error) {
   rows, err := db.Query(query)
@@ -356,7 +378,7 @@ func (self *SQLDB) Close() {
 	glog.V(logger.Error).Infoln("Closed SQL DB:", self.fn)
 }
 
-func (self *SQLDB) SelectTransactionsForAccounts(accounts []string) (trans []string, err error) {
+func (self *SQLDB) SelectTransactionsForAccounts(accounts []string) (trans SQL_Transactions, err error) {
   if len(accounts) <= 0 {
     return nil, errors.New("Input accounts required")
   }
@@ -374,7 +396,7 @@ func (self *SQLDB) SelectTransactionsForAccounts(accounts []string) (trans []str
 
   acctSQL := strings.Join(accounts, "','")
   query := `
-    SELECT hash
+    SELECT hash, blocknumber
     FROM shift_transactions
     WHERE sender IN ('`
   query += acctSQL
@@ -390,8 +412,9 @@ func (self *SQLDB) SelectTransactionsForAccounts(accounts []string) (trans []str
 
   for rows.Next() {
     var hash string
-    rows.Scan(&hash)
-    trans = append(trans, hash)
+    var bn uint64
+    rows.Scan(&hash, &bn)
+    trans = append(trans, NewTransaction(hash, bn))
   }
   rows.Close()
 
