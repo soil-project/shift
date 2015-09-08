@@ -534,6 +534,7 @@ func (s *Ethereum) Miner() *miner.Miner { return s.miner }
 func (s *Ethereum) Name() string                         { return s.net.Name }
 func (s *Ethereum) AccountManager() *accounts.Manager    { return s.accountManager }
 func (s *Ethereum) ChainManager() *core.ChainManager     { return s.chainManager }
+func (s *Ethereum) SQLDB() *sqldb.SQLDB     						 { return s.sqlDB }
 func (s *Ethereum) BlockProcessor() *core.BlockProcessor { return s.blockProcessor }
 func (s *Ethereum) TxPool() *core.TxPool                 { return s.txPool }
 func (s *Ethereum) Whisper() *whisper.Whisper            { return s.whisper }
