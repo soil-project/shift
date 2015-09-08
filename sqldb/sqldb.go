@@ -18,22 +18,18 @@ package sqldb
 
 import (
   "os"
-  "io"
-  "fmt"
   "errors"
   "strings"
   "regexp"
   "database/sql"
 	"sync"
+  "fmt"
 
 	"github.com/shiftcurrency/shift/logger"
 	"github.com/shiftcurrency/shift/logger/glog"
-  "github.com/shiftcurrency/shift/rlp"
   "github.com/shiftcurrency/shift/core"
   "github.com/shiftcurrency/shift/core/types"
   _ "github.com/mattn/go-sqlite3"
-
-	gometrics "github.com/rcrowley/go-metrics"
 )
 
 var db_version uint64 = 1
@@ -41,16 +37,6 @@ var db_version uint64 = 1
 type SQLDB struct {
 	fn string      // filename for reporting
 	db *sql.DB // sqlite3 instance
-
-	getTimer       gometrics.Timer // Timer for measuring the database get request counts and latencies
-	putTimer       gometrics.Timer // Timer for measuring the database put request counts and latencies
-	delTimer       gometrics.Timer // Timer for measuring the database delete request counts and latencies
-	missMeter      gometrics.Meter // Meter for measuring the missed database get requests
-	readMeter      gometrics.Meter // Meter for measuring the database get request data usage
-	writeMeter     gometrics.Meter // Meter for measuring the database put request data usage
-	compTimeMeter  gometrics.Meter // Meter for measuring the total time spent in database compaction
-	compReadMeter  gometrics.Meter // Meter for measuring the data read during compaction
-	compWriteMeter gometrics.Meter // Meter for measuring the data written during compaction
 
 	quitLock sync.Mutex      // Mutex protecting the quit channel access
 	quitChan chan chan error // Quit channel to stop the metrics collection before closing the database
@@ -61,19 +47,16 @@ type SQL_Transaction struct {
   BlockNumber   uint64
 }
 
+type SQL_Transactions []*SQL_Transaction
+
 func NewTransaction(hash string, blocknumber uint64) *SQL_Transaction {
 	return &SQL_Transaction{Hash: hash, BlockNumber: blocknumber}
 }
 
-func (self *SQL_Transaction) EncodeRLP(w io.Writer) error {
-	return rlp.Encode(w, []interface{}{self.Hash, self.BlockNumber})
+func (self *SQL_Transaction) MarshalJSON() ([]byte, error) {
+  result := fmt.Sprintf(`{ "hash": "%s", "blockNumber": %d }`, self.Hash, self.BlockNumber)
+  return []byte(result), nil
 }
-
-func (self *SQL_Transaction) String() string {
-	return fmt.Sprintf(`sql transaction: %x %d`, self.Hash, self.BlockNumber)
-}
-
-type SQL_Transactions []*SQL_Transaction
 
 func checkExists(db *sql.DB, query string) (bool, error) {
   rows, err := db.Query(query)
