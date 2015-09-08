@@ -81,7 +81,6 @@ func (self *personalApi) Execute(req *shared.Request) (interface{}, error) {
 		return callback(self, req)
 	}
 
-  fmt.Println("DUNNO")
 	return nil, shared.NewNotImplementedError(req.Method)
 }
 
