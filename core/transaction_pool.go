@@ -243,6 +243,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction) error {
 		return ErrIntrinsicGas
 	}
 
+    if tx.Gas().Cmp(IntrinsicGas(tx.Data())) < 90000 {
+        glog.Infof("(Gas set to: %v. Miners can ignore transactions with a low amount of gas.", tx.Gas())
+    }
+
 	return nil
 }
 
