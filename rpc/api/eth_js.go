@@ -43,7 +43,7 @@ web3._extend(
 	[
 		new web3._extend.Property({
 			name: 'pendingTransactions',
-			getter: 'eth_pendingTransactions'
+			getter: 'shf_pendingTransactions'
 		})
 	]
 });
