@@ -243,10 +243,6 @@ func (pool *TxPool) validateTx(tx *types.Transaction) error {
 		return ErrIntrinsicGas
 	}
 
-    if tx.Gas().Cmp(big.NewInt(90000)) < 0 {
-        glog.Infof("(Gas set to: %v. Miners can ignore transactions with a low amount of gas.", tx.Gas())
-    }
-
 	return nil
 }
 
@@ -349,11 +345,13 @@ func (self *TxPool) AddTransactions(txs []*types.Transaction) {
 func (tp *TxPool) GetTransaction(hash common.Hash) *types.Transaction {
 	// check the txs first
 	if tx, ok := tp.pending[hash]; ok {
+        glog.V(logger.Debug).Infoln("debug gettransaction: %v", tx.Transaction)
 		return tx.Transaction
 	}
 	// check queue
 	for _, txs := range tp.queue {
 		if tx, ok := txs[hash]; ok {
+            glog.V(logger.Debug).Infoln("debug tp.queue: %v", tx.Transaction)
 			return tx.Transaction
 		}
 	}
