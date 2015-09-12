@@ -57,6 +57,7 @@ const (
 type ChainManager struct {
 	//eth          EthManager
 	chainDb      common.Database
+	sqlDB        types.SQLDatabase
 	processor    types.BlockProcessor
 	eventMux     *event.TypeMux
 	genesisBlock *types.Block
@@ -83,10 +84,11 @@ type ChainManager struct {
 	pow pow.PoW
 }
 
-func NewChainManager(chainDb common.Database, pow pow.PoW, mux *event.TypeMux) (*ChainManager, error) {
+func NewChainManager(chainDb common.Database, sqlDB types.SQLDatabase, pow pow.PoW, mux *event.TypeMux) (*ChainManager, error) {
 	cache, _ := lru.New(blockCacheLimit)
 	bc := &ChainManager{
 		chainDb:  chainDb,
+		sqlDB:    sqlDB,
 		eventMux: mux,
 		quit:     make(chan struct{}),
 		cache:    cache,
@@ -273,6 +275,10 @@ func (bc *ChainManager) Reset() {
 }
 
 func (bc *ChainManager) removeBlock(block *types.Block) {
+	if bc.sqlDB != nil {
+		bc.sqlDB.DeleteBlock(block)
+	}
+
 	bc.chainDb.Delete(append(blockHashPre, block.Hash().Bytes()...))
 }
 
@@ -352,6 +358,10 @@ func (bc *ChainManager) insert(block *types.Block) {
 
 	bc.currentBlock = block
 	bc.lastBlockHash = block.Hash()
+
+  if bc.sqlDB != nil {
+  	bc.sqlDB.InsertBlock(block)
+	}
 }
 
 // Accessors
@@ -664,6 +674,82 @@ func (self *ChainManager) InsertChain(chain types.Blocks) (int, error) {
 	go self.eventMux.Post(queueEvent)
 
 	return 0, nil
+}
+
+// reorgs takes two blocks, an old chain and a new chain and will reconstruct the blocks and inserts them
+// to be part of the new canonical chain and accumulates potential missing transactions and post an
+// event about them
+func (self *ChainManager) reorg(oldBlock, newBlock *types.Block) error {
+	self.mu.Lock()
+	defer self.mu.Unlock()
+
+	var (
+		newChain    types.Blocks
+		commonBlock *types.Block
+		oldStart    = oldBlock
+		newStart    = newBlock
+		deletedTxs  types.Transactions
+		addedTxs    types.Transactions
+	)
+
+	// first reduce whoever is higher bound
+	if oldBlock.NumberU64() > newBlock.NumberU64() {
+		// reduce old chain
+		for oldBlock = oldBlock; oldBlock != nil && oldBlock.NumberU64() != newBlock.NumberU64(); oldBlock = self.GetBlock(oldBlock.ParentHash()) {
+			deletedTxs = append(deletedTxs, oldBlock.Transactions()...)
+		}
+	} else {
+		// reduce new chain and append new chain blocks for inserting later on
+		for newBlock = newBlock; newBlock != nil && newBlock.NumberU64() != oldBlock.NumberU64(); newBlock = self.GetBlock(newBlock.ParentHash()) {
+			newChain = append(newChain, newBlock)
+		}
+	}
+	if oldBlock == nil {
+		return fmt.Errorf("Invalid old chain")
+	}
+	if newBlock == nil {
+		return fmt.Errorf("Invalid new chain")
+	}
+
+	numSplit := newBlock.Number()
+	for {
+		if oldBlock.Hash() == newBlock.Hash() {
+			commonBlock = oldBlock
+			break
+		}
+		newChain = append(newChain, newBlock)
+
+		oldBlock, newBlock = self.GetBlock(oldBlock.ParentHash()), self.GetBlock(newBlock.ParentHash())
+		if oldBlock == nil {
+			return fmt.Errorf("Invalid old chain")
+		}
+		if newBlock == nil {
+			return fmt.Errorf("Invalid new chain")
+		}
+		deletedTxs = append(deletedTxs, oldBlock.Transactions()...)
+	}
+
+	if glog.V(logger.Debug) {
+		commonHash := commonBlock.Hash()
+		glog.Infof("Chain split detected @ %x. Reorganising chain from #%v %x to %x", commonHash[:4], numSplit, oldStart.Hash().Bytes()[:4], newStart.Hash().Bytes()[:4])
+	}
+
+	// insert blocks. Order does not matter. Last block will be written in ImportChain itself which creates the new head properly
+	for _, block := range newChain {
+		// insert the block in the canonical way, re-writing history
+		self.insert(block)
+		// write canonical receipts and transactions
+		PutTransactions(self.chainDb, block, block.Transactions())
+		PutReceipts(self.chainDb, GetBlockReceipts(self.chainDb, block.Hash()))
+
+		addedTxs = append(addedTxs, block.Transactions()...)
+	}
+
+	var diff types.Transactions
+	diff.Difference(deletedTxs, addedTxs)
+	self.eventMux.Post(RemovedTransactionEvent{diff})
+
+	return nil
 }
 
 // diff takes two blocks, an old chain and a new chain and will reconstruct the blocks and inserts them

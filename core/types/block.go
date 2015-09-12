@@ -135,6 +135,13 @@ type Block struct {
 	ReceivedAt time.Time
 }
 
+// A bit of a hack to put it here, but good enough for now
+type SQLDatabase interface {
+	InsertBlock(block *Block)
+	DeleteBlock(block *Block)
+}
+
+
 // StorageBlock defines the RLP encoding of a Block stored in the
 // state database. The StorageBlock encoding contains fields that
 // would otherwise need to be recomputed.
