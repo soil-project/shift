@@ -670,12 +670,12 @@ var BigNumber = require('bignumber.js');
 
 var ETH_UNITS = [
     'shf',
-    'Kshf',
-    'Mshf',
+    'kshf',
+    'kshf',
     'gshf',
-    'Tshf',
-    'Pshf',
-    'Eshf',
+    'tshf',
+    'pshf',
+    'eshf',
 
 ];
 
