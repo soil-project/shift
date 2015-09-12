@@ -229,14 +229,14 @@ func (self *SQLDB) Refresh(chainManager *core.ChainManager) {
     return
 	}
 
-  stmtBlock, err := tx.Prepare(`INSERT OR IGNORE shift_blocks(number, hash) values(?, ?)`)
+  stmtBlock, err := tx.Prepare(`insert or replace into shift_blocks(number, hash) values(?, ?)`)
   if err != nil {
     glog.V(logger.Error).Infoln("SQL DB:", err)
     return
 	}
 	defer stmtBlock.Close()
 
-  stmtTrans, err := tx.Prepare(`INSERT OR IGNORE shift_transactions(hash, blocknumber, sender, receiver) values(?, ?, ?, ?)`)
+  stmtTrans, err := tx.Prepare(`insert or replace into shift_transactions(hash, blocknumber, sender, receiver) values(?, ?, ?, ?)`)
   if err != nil {
     glog.V(logger.Error).Infoln("SQL DB:", err)
     return
@@ -285,14 +285,14 @@ func (self *SQLDB) InsertBlock(block *types.Block) {
     return
   }
 
-  stmtBlock, err := tx.Prepare(`INSERT OR IGNORE INTO shift_blocks(number, hash) values(?, ?)`)
+  stmtBlock, err := tx.Prepare(`insert or replace into shift_blocks(number, hash) values(?, ?)`)
   if err != nil {
     glog.V(logger.Error).Infoln("SQL DB:", err)
     return
   }
   defer stmtBlock.Close()
 
-  stmtTrans, err := tx.Prepare(`INSERT INTO shift_transactions(hash, blocknumber, sender, receiver) values(?, ?, ?, ?)`)
+  stmtTrans, err := tx.Prepare(`insert or replace into shift_transactions(hash, blocknumber, sender, receiver) values(?, ?, ?, ?)`)
   if err != nil {
     glog.V(logger.Error).Infoln("SQL DB:", err)
     return
