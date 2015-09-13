@@ -131,12 +131,12 @@ done:
 
 func includes(addresses []common.Address, a common.Address) bool {
 	for _, addr := range addresses {
-		if addr == a {
-			return true
+		if addr != a {
+			return false
 		}
 	}
 
-	return false
+	return true
 }
 
 func (self *Filter) FilterLogs(logs state.Logs) state.Logs {

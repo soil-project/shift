@@ -35,7 +35,6 @@ var (
 	// mapping between methods and handlers
 	personalMapping = map[string]personalhandler{
 		"personal_listAccounts":  (*personalApi).ListAccounts,
-		"personal_listAccountTransactions":  (*personalApi).ListAccountTransactions,
 		"personal_newAccount":    (*personalApi).NewAccount,
 		"personal_deleteAccount": (*personalApi).DeleteAccount,
 		"personal_unlockAccount": (*personalApi).UnlockAccount,
@@ -94,15 +93,6 @@ func (self *personalApi) ApiVersion() string {
 
 func (self *personalApi) ListAccounts(req *shared.Request) (interface{}, error) {
 	return self.xeth.Accounts(), nil
-}
-
-func (self *personalApi) ListAccountTransactions(req *shared.Request) (interface{}, error) {
-	args := new(ListTransactionsArgs)
-	if err := self.codec.Decode(req.Params, &args); err != nil {
-		return nil, shared.NewDecodeParamError(err.Error())
-	}
-	
-	return self.xeth.AccountTransactions(args.Accounts), nil
 }
 
 func (self *personalApi) NewAccount(req *shared.Request) (interface{}, error) {

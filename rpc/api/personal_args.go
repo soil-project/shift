@@ -44,40 +44,6 @@ func (args *NewAccountArgs) UnmarshalJSON(b []byte) (err error) {
 	return shared.NewInvalidTypeError("passhrase", "not a string")
 }
 
-type ListTransactionsArgs struct {
-	Accounts []string
-}
-
-func (args *ListTransactionsArgs) UnmarshalJSON(b []byte) (err error) {
-	var obj []interface{}
-	if err := json.Unmarshal(b, &obj); err != nil {
-		return shared.NewDecodeParamError(err.Error())
-	}
-
-	if len(obj) < 1 {
-		return shared.NewInsufficientParamsError(len(obj), 1)
-	}
-
-	other, ok := obj[0].([]interface{})
-	if !ok {
-		other = obj
-		ok = true
-	}
-
-	if ok {
-		args.Accounts = make([]string, len(other))
-		for i, acct := range other {
-			if args.Accounts[i], ok = acct.(string); !ok {
-				return shared.NewInvalidTypeError("accounts", "not a string array2")
-			}
-		}
-		return nil
-	}
-
-	return shared.NewInvalidTypeError("accounts", "not a string array1")
-}
-
-
 type DeleteAccountArgs struct {
 	Address    string
 	Passphrase string

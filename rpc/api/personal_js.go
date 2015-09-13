@@ -22,12 +22,6 @@ web3._extend({
 	methods:
 	[
 		new web3._extend.Method({
-			name: 'listAccountTransactions',
-			call: 'personal_listAccountTransactions',
-			params: 1,
-			inputFormatter: [null]
-		}),
-		new web3._extend.Method({
 			name: 'newAccount',
 			call: 'personal_newAccount',
 			params: 1,
@@ -41,7 +35,7 @@ web3._extend({
 			inputFormatter: [null, null, null]
 		}),
 		new web3._extend.Method({
-			name: 'isAccountLocked',
+			name: 'IsAccountLocked',
 			call: 'personal_isAccountLocked',
 			params: 1,
 			inputFormatter: [null]

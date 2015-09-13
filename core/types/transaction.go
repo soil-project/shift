@@ -284,20 +284,6 @@ func (s Transactions) GetRlp(i int) []byte {
 	return enc
 }
 
-// Difference sets s to the difference of a to b. Expects s to be empty
-func (s Transactions) Difference(a, b Transactions) {
-	m := make(map[common.Hash]*Transaction)
-	for _, tx := range b {
-		m[tx.Hash()] = tx
-	}
-
-	for _, tx := range a {
-		if _, ok := m[tx.Hash()]; !ok {
-			s = append(s, tx)
-		}
-	}
-}
-
 type TxByNonce struct{ Transactions }
 
 func (s TxByNonce) Less(i, j int) bool {

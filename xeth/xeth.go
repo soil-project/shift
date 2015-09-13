@@ -40,13 +40,12 @@ import (
 	"github.com/shiftcurrency/shift/logger/glog"
 	"github.com/shiftcurrency/shift/miner"
 	"github.com/shiftcurrency/shift/rlp"
-	"github.com/shiftcurrency/shift/sqldb"
 )
 
 var (
 	filterTickerTime = 5 * time.Minute
-	defaultGasPrice  = big.NewInt(10000000000000)
-	defaultGas       = big.NewInt(90000)
+	defaultGasPrice  = big.NewInt(10000000000000) //150000000000
+	defaultGas       = big.NewInt(90000)          //500000
 	dappStorePre     = []byte("dapp-")
 	addrReg          = regexp.MustCompile(`^(0x)?[a-fA-F0-9]{40}$`)
 )
@@ -392,17 +391,6 @@ func (self *XEth) Accounts() []string {
 		accountAddresses[i] = ac.Address.Hex()
 	}
 	return accountAddresses
-}
-
-func (self *XEth) AccountTransactions(accts []string) sqldb.SQL_Transactions {
-	transactions, err := self.backend.SQLDB().SelectTransactionsForAccounts(accts)
-
-  // TODO: refactor xeth for proper error handling
-	if err != nil {
-		fmt.Println("Error reading transactions from SQL", err)
-	}
-
-	return transactions
 }
 
 // accessor for solidity compiler.
@@ -799,7 +787,7 @@ func (self *XEth) PushTx(encodedTx string) (string, error) {
 		return "", err
 	}
 
-	err = self.backend.TxPool().Add(tx, true)
+	err = self.backend.TxPool().Add(tx)
 	if err != nil {
 		return "", err
 	}
@@ -849,7 +837,7 @@ func (self *XEth) Call(fromStr, toStr, valueStr, gasStr, gasPriceStr, dataStr st
 	}
 
 	if msg.gas.Cmp(big.NewInt(0)) == 0 {
-		msg.gas = DefaultGas()
+		msg.gas = big.NewInt(50000000)
 	}
 
 	if msg.gasPrice.Cmp(big.NewInt(0)) == 0 {
@@ -944,11 +932,6 @@ func (self *XEth) Transact(fromStr, toStr, nonceStr, valueStr, gasStr, gasPriceS
 		contractCreation = true
 	}
 
-    if gas.Cmp(big.NewInt(90000)) < 0 {
-        glog.Infof("(Gas set to %v for hash: %x. Miners can ignore transactions with a low amount of gas.", gas, toStr)
-    }
-
-
 	// 2015-05-18 Is this still needed?
 	// TODO if no_private_key then
 	//if _, exists := p.register[args.From]; exists {
@@ -993,7 +976,7 @@ func (self *XEth) Transact(fromStr, toStr, nonceStr, valueStr, gasStr, gasPriceS
 	if err != nil {
 		return "", err
 	}
-	if err = self.backend.TxPool().Add(signed, true); err != nil {
+	if err = self.backend.TxPool().Add(signed); err != nil {
 		return "", err
 	}
 

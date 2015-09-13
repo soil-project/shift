@@ -22,7 +22,6 @@ import (
 	"math/big"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/shiftcurrency/shift/common"
 	"github.com/shiftcurrency/shift/core/state"
@@ -46,21 +45,10 @@ var (
 )
 
 const (
-	maxQueued  = 64               // max limit of queued txs per address
-	resendTime = 39 * time.Second // every ~3 blocks
+	maxQueued = 64 // max limit of queued txs per address
 )
 
-type (
-	stateFn func() *state.StateDB
-	poolTx  struct {
-		*types.Transaction
-
-		owned     bool
-		addedAt   time.Time
-		sentAt    time.Time
-		postTries int // amount of tx posts
-	}
-)
+type stateFn func() *state.StateDB
 
 // TxPool contains all currently known transactions. Transactions
 // enter the pool when they are received from the network or submitted
@@ -79,21 +67,21 @@ type TxPool struct {
 	events       event.Subscription
 
 	mu      sync.RWMutex
-	pending map[common.Hash]*poolTx // processable transactions
-	queue   map[common.Address]map[common.Hash]*poolTx
+	pending map[common.Hash]*types.Transaction // processable transactions
+	queue   map[common.Address]map[common.Hash]*types.Transaction
 }
 
 func NewTxPool(eventMux *event.TypeMux, currentStateFn stateFn, gasLimitFn func() *big.Int) *TxPool {
 	pool := &TxPool{
-		pending:      make(map[common.Hash]*poolTx),
-		queue:        make(map[common.Address]map[common.Hash]*poolTx),
+		pending:      make(map[common.Hash]*types.Transaction),
+		queue:        make(map[common.Address]map[common.Hash]*types.Transaction),
 		quit:         make(chan bool),
 		eventMux:     eventMux,
 		currentState: currentStateFn,
 		gasLimit:     gasLimitFn,
 		minGasPrice:  new(big.Int),
 		pendingState: state.ManageState(currentStateFn()),
-		events:       eventMux.Subscribe(ChainHeadEvent{}, GasPriceChanged{}, RemovedTransactionEvent{}),
+		events:       eventMux.Subscribe(ChainHeadEvent{}, GasPriceChanged{}),
 	}
 	go pool.eventLoop()
 
@@ -112,10 +100,6 @@ func (pool *TxPool) eventLoop() {
 			pool.resetState()
 		case GasPriceChanged:
 			pool.minGasPrice = ev.Price
-		case RemovedTransactionEvent:
-			pool.mu.Unlock()
-			pool.AddTransactions(ev.Txs)
-			pool.mu.Lock()
 		}
 
 		pool.mu.Unlock()
@@ -139,22 +123,6 @@ func (pool *TxPool) resetState() {
 			// than the state nonce; validatePool took care of that.
 			if pool.pendingState.GetNonce(addr) < tx.Nonce() {
 				pool.pendingState.SetNonce(addr, tx.Nonce())
-			}
-
-			if tx.owned && pool.currentState().GetNonce(addr) == tx.Nonce() { // only resend first to prevent spam
-				if time.Since(tx.sentAt) > resendTime {
-					/*
-						In the future we can do something like the following
-						and let the user take some action if the frontend is
-						capable (e.g. higher gas price).
-						if tx.tries > 10 {
-							post(FailedTx{tx})
-							delete(tx)
-						}
-					*/
-					glog.V(logger.Debug).Infof("resending tx: %x\n", tx.Hash())
-					go pool.postTx(tx)
-				}
 			}
 		}
 	}
@@ -247,7 +215,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction) error {
 }
 
 // validate and queue transactions.
-func (self *TxPool) add(tx *types.Transaction, owned bool) error {
+func (self *TxPool) add(tx *types.Transaction) error {
 	hash := tx.Hash()
 
 	if self.pending[hash] != nil {
@@ -257,8 +225,7 @@ func (self *TxPool) add(tx *types.Transaction, owned bool) error {
 	if err != nil {
 		return err
 	}
-
-	self.queueTx(hash, tx, owned)
+	self.queueTx(hash, tx)
 
 	if glog.V(logger.Debug) {
 		var toname string
@@ -278,16 +245,16 @@ func (self *TxPool) add(tx *types.Transaction, owned bool) error {
 }
 
 // queueTx will queue an unknown transaction
-func (self *TxPool) queueTx(hash common.Hash, tx *types.Transaction, owned bool) {
+func (self *TxPool) queueTx(hash common.Hash, tx *types.Transaction) {
 	from, _ := tx.From() // already validated
 	if self.queue[from] == nil {
-		self.queue[from] = make(map[common.Hash]*poolTx)
+		self.queue[from] = make(map[common.Hash]*types.Transaction)
 	}
-	self.queue[from][hash] = &poolTx{tx, owned, time.Now(), time.Time{}, 0}
+	self.queue[from][hash] = tx
 }
 
 // addTx will add a transaction to the pending (processable queue) list of transactions
-func (pool *TxPool) addTx(hash common.Hash, addr common.Address, tx *poolTx) {
+func (pool *TxPool) addTx(hash common.Hash, addr common.Address, tx *types.Transaction) {
 	if _, ok := pool.pending[hash]; !ok {
 		pool.pending[hash] = tx
 
@@ -297,29 +264,22 @@ func (pool *TxPool) addTx(hash common.Hash, addr common.Address, tx *poolTx) {
 		// Notify the subscribers. This event is posted in a goroutine
 		// because it's possible that somewhere during the post "Remove transaction"
 		// gets called which will then wait for the global tx pool lock and deadlock.
-		go pool.postTx(tx)
+		go pool.eventMux.Post(TxPreEvent{tx})
 	}
-}
-
-// postTx posts the transaction to the subscribers
-func (pool *TxPool) postTx(tx *poolTx) {
-	pool.eventMux.Post(TxPreEvent{tx.Transaction})
-	tx.sentAt = time.Now()
-	tx.postTries++
 }
 
 // Add queues a single transaction in the pool if it is valid.
-func (self *TxPool) Add(tx *types.Transaction, owned bool) error {
+func (self *TxPool) Add(tx *types.Transaction) (err error) {
 	self.mu.Lock()
 	defer self.mu.Unlock()
 
-	// validate transaction
-	if err := self.add(tx, owned); err != nil {
-		return err
+	err = self.add(tx)
+	if err == nil {
+		// check and validate the queueue
+		self.checkQueue()
 	}
-	self.checkQueue()
 
-	return nil
+	return
 }
 
 // AddTransactions attempts to queue all valid transactions in txs.
@@ -328,7 +288,7 @@ func (self *TxPool) AddTransactions(txs []*types.Transaction) {
 	defer self.mu.Unlock()
 
 	for _, tx := range txs {
-		if err := self.add(tx, false); err != nil {
+		if err := self.add(tx); err != nil {
 			glog.V(logger.Debug).Infoln("tx error:", err)
 		} else {
 			h := tx.Hash()
@@ -345,14 +305,12 @@ func (self *TxPool) AddTransactions(txs []*types.Transaction) {
 func (tp *TxPool) GetTransaction(hash common.Hash) *types.Transaction {
 	// check the txs first
 	if tx, ok := tp.pending[hash]; ok {
-        glog.V(logger.Debug).Infoln("debug gettransaction: %v", tx.Transaction)
-		return tx.Transaction
+		return tx
 	}
 	// check queue
 	for _, txs := range tp.queue {
 		if tx, ok := txs[hash]; ok {
-            glog.V(logger.Debug).Infoln("debug tp.queue: %v", tx.Transaction)
-			return tx.Transaction
+			return tx
 		}
 	}
 	return nil
@@ -372,7 +330,7 @@ func (self *TxPool) GetTransactions() (txs types.Transactions) {
 	txs = make(types.Transactions, len(self.pending))
 	i := 0
 	for _, tx := range self.pending {
-		txs[i] = tx.Transaction
+		txs[i] = tx
 		i++
 	}
 	return txs
@@ -386,7 +344,7 @@ func (self *TxPool) GetQueuedTransactions() types.Transactions {
 	var ret types.Transactions
 	for _, txs := range self.queue {
 		for _, tx := range txs {
-			ret = append(ret, tx.Transaction)
+			ret = append(ret, tx)
 		}
 	}
 	sort.Sort(types.TxByNonce{ret})
@@ -463,7 +421,7 @@ func (pool *TxPool) checkQueue() {
 				break
 			}
 			delete(txs, e.hash)
-			pool.addTx(e.hash, address, e.poolTx)
+			pool.addTx(e.hash, address, e.Transaction)
 		}
 		// Delete the entire queue entry if it became empty.
 		if len(txs) == 0 {
@@ -492,7 +450,7 @@ type txQueue []txQueueEntry
 type txQueueEntry struct {
 	hash common.Hash
 	addr common.Address
-	*poolTx
+	*types.Transaction
 }
 
 func (q txQueue) Len() int           { return len(q) }

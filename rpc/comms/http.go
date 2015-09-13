@@ -271,13 +271,13 @@ func (self *httpClient) Send(req interface{}) error {
 		reply, _ := ioutil.ReadAll(resp.Body)
 		var rpcSuccessResponse shared.SuccessResponse
 		if err = self.codec.Decode(reply, &rpcSuccessResponse); err == nil {
-			self.lastRes = &rpcSuccessResponse
+			self.lastRes = rpcSuccessResponse.Result
 			self.lastErr = err
 			return nil
 		} else {
 			var rpcErrorResponse shared.ErrorResponse
 			if err = self.codec.Decode(reply, &rpcErrorResponse); err == nil {
-				self.lastRes = &rpcSuccessResponse
+				self.lastRes = rpcErrorResponse.Error
 				self.lastErr = err
 				return nil
 			} else {
