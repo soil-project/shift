@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	ClientIdentifier = "Shift"
+	ClientIdentifier = "SHIFT"
 	Version          = "0.3.0"
 	VersionMajor     = 0
 	VersionMinor     = 3

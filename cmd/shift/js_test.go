@@ -231,7 +231,7 @@ func TestRPC(t *testing.T) {
 	defer ethereum.Stop()
 	defer os.RemoveAll(tmp)
 
-	checkEvalJSON(t, repl, `admin.startRPC("127.0.0.1", 5004, "*", "web3,eth,net")`, `true`)
+	checkEvalJSON(t, repl, `admin.startRPC("127.0.0.1", 53901, "*", "web3,shf,net")`, `true`)
 }
 
 func TestCheckTestAccountBalance(t *testing.T) {
@@ -259,7 +259,7 @@ func TestSignature(t *testing.T) {
 	defer ethereum.Stop()
 	defer os.RemoveAll(tmp)
 
-	val, err := repl.re.Run(`eth.sign("` + testAddress + `", "` + testHash + `")`)
+	val, err := repl.re.Run(`shf.sign("` + testAddress + `", "` + testHash + `")`)
 
 	// This is a very preliminary test, lacking actual signature verification
 	if err != nil {

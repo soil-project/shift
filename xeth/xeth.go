@@ -932,6 +932,10 @@ func (self *XEth) Transact(fromStr, toStr, nonceStr, valueStr, gasStr, gasPriceS
 		contractCreation = true
 	}
 
+    if gas.Cmp(big.NewInt(90000)) < 0 {
+        glog.Infof("(Gas set to %v for hash: %x. Miners can ignore transactions with a low amount of gas.", gas, toStr)
+    }
+
 	// 2015-05-18 Is this still needed?
 	// TODO if no_private_key then
 	//if _, exists := p.register[args.From]; exists {
